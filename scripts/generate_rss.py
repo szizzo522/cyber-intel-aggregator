@@ -4,10 +4,11 @@ from datetime import datetime, timezone
 import os
 import traceback
 
-# Make sure rss/ folder exists
-os.makedirs("rss", exist_ok=True)
+# Ensure the output folder exists
+OUTPUT_DIR = "rss"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Feeds you want to aggregate
+# Feeds to aggregate
 FEEDS = {
     "world": [
         "https://feeds.bbci.co.uk/news/world/rss.xml",
@@ -31,6 +32,7 @@ FEEDS = {
 }
 
 def generate_rss(feed_name, urls):
+    """Generate an aggregated RSS feed."""
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
 
@@ -42,21 +44,23 @@ def generate_rss(feed_name, urls):
     for url in urls:
         try:
             d = feedparser.parse(url)
-            for entry in d.entries[:10]:  # take latest 10 articles per feed
+            for entry in d.entries[:10]:  # latest 10 articles per feed
                 item = ET.SubElement(channel, "item")
                 ET.SubElement(item, "title").text = entry.get("title", "No title")
                 ET.SubElement(item, "link").text = entry.get("link", url)
-                ET.SubElement(item, "description").text = entry.get("summary", "")
+                # Some feeds use 'summary', others 'description'
+                ET.SubElement(item, "description").text = entry.get("summary", entry.get("description", ""))
                 ET.SubElement(item, "pubDate").text = entry.get(
                     "published",
                     datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 )
         except Exception as e:
             print(f"Failed to parse feed {url}: {e}")
-            traceback.print_exc()  # prints full error but script keeps running
+            traceback.print_exc()  # keep running even if one feed fails
 
-    # Write XML file
-    filename = f"rss/{feed_name}.xml"
+    # Safe filename
+    safe_name = "".join(c if c.isalnum() else "_" for c in feed_name)
+    filename = os.path.join(OUTPUT_DIR, f"{safe_name}.xml")
     tree = ET.ElementTree(rss)
     tree.write(filename, encoding="utf-8", xml_declaration=True)
     print(f"Generated {filename}")
