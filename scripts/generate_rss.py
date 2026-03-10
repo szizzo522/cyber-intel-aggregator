@@ -1,6 +1,6 @@
 import feedparser
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import traceback
 
@@ -37,7 +37,7 @@ def generate_rss(feed_name, urls):
     ET.SubElement(channel, "title").text = f"{feed_name.capitalize()} RSS Feed"
     ET.SubElement(channel, "link").text = "https://isamuel.dev/rss-feed/"
     ET.SubElement(channel, "description").text = f"Aggregated {feed_name} news feed."
-    ET.SubElement(channel, "lastBuildDate").text = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+    ET.SubElement(channel, "lastBuildDate").text = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     for url in urls:
         try:
@@ -49,7 +49,7 @@ def generate_rss(feed_name, urls):
                 ET.SubElement(item, "description").text = entry.get("summary", "")
                 ET.SubElement(item, "pubDate").text = entry.get(
                     "published",
-                    datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+                    datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 )
         except Exception as e:
             print(f"Failed to parse feed {url}: {e}")
