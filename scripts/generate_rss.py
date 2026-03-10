@@ -3,12 +3,11 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 import os
 import traceback
+import requests
 
-# Ensure the output folder exists
 OUTPUT_DIR = "rss"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Feeds to aggregate
 FEEDS = {
     "world": [
         "https://feeds.bbci.co.uk/news/world/rss.xml",
@@ -25,14 +24,24 @@ FEEDS = {
     "cyber": [
         "https://www.crowdstrike.com/blog/feed/",
         "https://www.ibm.com/blogs/security/feed/",
-        "https://www.tanium.com/blog/feed/",
-        "https://www.gartner.com/en/newsroom/rss-feeds",
-        "https://www.lapsus.com/feed/"  # hypothetical
+        "https://www.tanium.com/blog/feed/"
     ]
 }
 
+def fetch_feed(url):
+    """Fetch RSS with timeout to prevent hanging."""
+    try:
+        print(f"Fetching {url}")
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        return feedparser.parse(r.content)
+    except Exception as e:
+        print(f"Failed to fetch {url}: {e}")
+        return None
+
 def generate_rss(feed_name, urls):
-    """Generate an aggregated RSS feed."""
+    print(f"\nGenerating feed: {feed_name}")
+
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
 
@@ -41,30 +50,44 @@ def generate_rss(feed_name, urls):
     ET.SubElement(channel, "description").text = f"Aggregated {feed_name} news feed."
     ET.SubElement(channel, "lastBuildDate").text = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
+    total_items = 0
+
     for url in urls:
         try:
-            d = feedparser.parse(url)
-            for entry in d.entries[:10]:  # latest 10 articles per feed
+            d = fetch_feed(url)
+
+            if not d:
+                continue
+
+            for entry in d.entries[:5]:  # limit per feed
                 item = ET.SubElement(channel, "item")
+
                 ET.SubElement(item, "title").text = entry.get("title", "No title")
                 ET.SubElement(item, "link").text = entry.get("link", url)
-                # Some feeds use 'summary', others 'description'
-                ET.SubElement(item, "description").text = entry.get("summary", entry.get("description", ""))
+
+                ET.SubElement(item, "description").text = entry.get(
+                    "summary",
+                    entry.get("description", "")
+                )
+
                 ET.SubElement(item, "pubDate").text = entry.get(
                     "published",
                     datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
                 )
-        except Exception as e:
-            print(f"Failed to parse feed {url}: {e}")
-            traceback.print_exc()  # keep running even if one feed fails
 
-    # Safe filename
-    safe_name = "".join(c if c.isalnum() else "_" for c in feed_name)
-    filename = os.path.join(OUTPUT_DIR, f"{safe_name}.xml")
+                total_items += 1
+
+        except Exception as e:
+            print(f"Failed parsing {url}: {e}")
+            traceback.print_exc()
+
+    filename = os.path.join(OUTPUT_DIR, f"{feed_name}.xml")
     tree = ET.ElementTree(rss)
     tree.write(filename, encoding="utf-8", xml_declaration=True)
-    print(f"Generated {filename}")
 
-# Generate all feeds
+    print(f"Generated {filename} with {total_items} items")
+
 for feed_name, urls in FEEDS.items():
     generate_rss(feed_name, urls)
+
+print("\nRSS generation complete.")
