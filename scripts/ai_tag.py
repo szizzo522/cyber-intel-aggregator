@@ -1,26 +1,30 @@
 import requests
 import json
 import os
+import time
 
+# Load API key from environment
 API_KEY = os.environ["OPENROUTER_API_KEY"]
 
-with open("articles.json") as f:
+# Load articles collected by collect.py
+with open("articles.json", "r", encoding="utf-8") as f:
     articles = json.load(f)
 
 tagged = []
 
 for a in articles:
-
+    # Prepare the prompt for the AI
     prompt = f"""
-    Categorize this cybersecurity article.
+Categorize this cybersecurity article.
 
-    Return JSON with:
-    category (ransomware, vulnerability, malware, threat-intel, general)
+Return ONLY JSON with:
+{{"category": one of ["ransomware", "vulnerability", "malware", "threat-intel", "general"]}}
 
-    Title: {a['title']}
-    Summary: {a['summary']}
-    """
+Title: {a['title']}
+Summary: {a.get('summary','')}
+"""
 
+    # Send request to OpenRouter
     r = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
         headers={
@@ -29,15 +33,31 @@ for a in articles:
         },
         json={
             "model": "anthropic/claude-3-haiku",
-            "messages":[{"role":"user","content":prompt}]
+            "messages": [{"role": "user", "content": prompt}]
         }
     )
 
     result = r.json()
 
-    a["tag"] = result["choices"][0]["message"]["content"]
+    # Safely parse the AI response as JSON
+    raw_content = result["choices"][0]["message"]["content"].strip()
+    try:
+        parsed = json.loads(raw_content)
+        category = parsed.get("category", "general")
+    except json.JSONDecodeError:
+        # fallback in case AI returned text instead of JSON
+        category = "general"
+
+    # Normalize the category to lowercase for safety
+    a["tag"] = category.lower()
 
     tagged.append(a)
 
-with open("tagged_articles.json","w") as f:
-    json.dump(tagged,f)
+    # Optional: small delay to prevent rate limits
+    time.sleep(1)
+
+# Write the tagged articles safely
+with open("tagged_articles.json", "w", encoding="utf-8") as f:
+    json.dump(tagged, f, ensure_ascii=False, indent=2)
+
+print("✅ Articles tagged successfully!")
