@@ -2,6 +2,7 @@ name: Run Cyber Aggregator
 
 on:
   schedule:
+    # Runs every 15 minutes
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
@@ -10,31 +11,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1️⃣ Checkout your aggregator repo
     - uses: actions/checkout@v3
 
+    # 2️⃣ Setup Python
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: 3.11
 
-    - run: pip install -r requirements.txt
+    # 3️⃣ Install requirements
+    - name: Install dependencies
+      run: pip install -r requirements.txt
 
-    - run: python scripts/collect.py
+    # 4️⃣ Collect raw articles
+    - name: Collect articles
+      run: python scripts/collect.py
 
-    - run: python scripts/ai_tag.py
+    # 5️⃣ AI tagging
+    - name: Tag articles with AI
+      run: python scripts/ai_tag.py
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-    - run: python scripts/build_rss.py
+    # 6️⃣ Build RSS feeds (all + category feeds)
+    - name: Build RSS feeds
+      run: python scripts/build_rss.py
 
+    # 7️⃣ Push feeds to your portfolio repo
     - name: Push feeds to website repo
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
       run: |
-        git clone https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/szizzo522/my-personal-website.git
+        # Clone your personal website repo
+        git clone https://x-access-token:${GH_TOKEN}@github.com/szizzo522/my-personal-website.git
         mkdir -p my-personal-website/feeds
+
+        # Copy all generated feeds
         cp generated_feeds/*.xml my-personal-website/feeds/
+
+        # Commit and push
         cd my-personal-website
         git config user.name "rss-bot"
         git config user.email "rss@bot.com"
-        git add .
-        git commit -m "update feeds"
+        git add feeds/*.xml
+        git commit -m "Update RSS feeds" || echo "No changes to commit"
         git push
