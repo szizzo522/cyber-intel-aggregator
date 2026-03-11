@@ -7,7 +7,7 @@ import re
 # Create output folder
 os.makedirs("generated_feeds", exist_ok=True)
 
-# Load articles
+# Load tagged articles
 with open("tagged_articles.json", "r", encoding="utf-8") as f:
     articles = json.load(f)
 
@@ -35,9 +35,9 @@ for article in articles:
     
     # Use AI-generated tag or fallback to General
     raw_category = article.get("tag", "General")
-    category = safe_filename(raw_category)
+    category = safe_filename(raw_category, max_len=15)  # short filename for safety
     
-    # Prepend original category to title for clarity
+    # Prepend original category in title
     title_with_tag = f"[{raw_category}] {title}"
 
     # Format pubDate
@@ -53,9 +53,9 @@ for article in articles:
     </item>
     """
 
-    # Add item to "all" feed
+    # Add to "all" feed
     feeds.setdefault("all", []).append(item_xml)
-    # Add item to category-specific feed
+    # Add to category-specific feed
     feeds.setdefault(category, []).append(item_xml)
 
 # Function to build full RSS XML
@@ -73,11 +73,11 @@ def build_rss(items, feed_title="Cyber Threat Intel Feed"):
 
 # Write RSS files
 for category_name, items in feeds.items():
-    # Add consistent prefix for category feeds
     if category_name == "all":
         filename = "generated_feeds/all.xml"
     else:
-        filename = f"generated_feeds/category_{safe_filename(category_name)}.xml"
+        # Use safe truncated filename
+        filename = f"generated_feeds/category_{safe_filename(category_name, max_len=15)}.xml"
 
     with open(filename, "w", encoding="utf-8") as f:
         f.write(build_rss(items, feed_title=f"Cyber Threat Intel Feed - {category_name}"))
