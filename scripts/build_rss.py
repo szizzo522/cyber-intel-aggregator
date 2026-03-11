@@ -1,85 +1,63 @@
+import requests
 import json
-from datetime import datetime
 import os
-from xml.sax.saxutils import escape
-import re
+import time
 
-# Create output folder
-os.makedirs("generated_feeds", exist_ok=True)
+# Load API key from environment
+API_KEY = os.environ["OPENROUTER_API_KEY"]
 
-# Load articles
-with open("tagged_articles.json", "r", encoding="utf-8") as f:
+# Load articles collected by collect.py
+with open("articles.json", "r", encoding="utf-8") as f:
     articles = json.load(f)
 
-# Dictionary: key=category, value=list of RSS <item>s
-feeds = {}
+tagged = []
 
-# Safe filename helper
-def safe_filename(name, max_len=20):
-    """
-    Convert category/tag to a safe filename:
-    - Lowercase
-    - Spaces → underscores
-    - Remove non-alphanumeric/underscore chars
-    - Truncate to max_len chars
-    """
-    name = str(name).lower().replace(" ", "_")
-    name = re.sub(r"[^a-z0-9_]", "", name)
-    return name[:max_len] or "general"
+for a in articles:
+    # Prepare the prompt for the AI
+    prompt = f"""
+Categorize this cybersecurity article.
 
-# Build RSS items
-for article in articles:
-    title = escape(article.get("title", "No Title"))
-    link = escape(article.get("link", ""))
-    summary = escape(article.get("summary", ""))
-    
-    # Use AI-generated tag or fallback to General
-    raw_category = article.get("tag", "General")
-    category = safe_filename(raw_category)
-    
-    # Prepend original category to title for clarity
-    title_with_tag = f"[{raw_category}] {title}"
+Return ONLY JSON with:
+{{"category": one of ["ransomware", "vulnerability", "malware", "threat-intel", "general"]}}
 
-    # Format pubDate
-    pub_date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-    # Create RSS item XML
-    item_xml = f"""
-    <item>
-        <title>{title_with_tag}</title>
-        <link>{link}</link>
-        <description><![CDATA[{summary}]]></description>
-        <pubDate>{pub_date}</pubDate>
-    </item>
-    """
-
-    # Add item to "all" feed
-    feeds.setdefault("all", []).append(item_xml)
-    # Add item to category-specific feed
-    feeds.setdefault(category, []).append(item_xml)
-
-# Function to build full RSS XML
-def build_rss(items, feed_title="Cyber Threat Intel Feed"):
-    rss = f"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-<channel>
-<title>{feed_title}</title>
-<link>https://isamuel.dev</link>
-<description>Aggregated cybersecurity news</description>
+Title: {a['title']}
+Summary: {a.get('summary','')}
 """
-    rss += "\n".join(items)
-    rss += "\n</channel></rss>"
-    return rss
 
-# Write RSS files
-for category_name, items in feeds.items():
-    # Add consistent prefix for category feeds
-    if category_name == "all":
-        filename = "generated_feeds/all.xml"
-    else:
-        filename = f"generated_feeds/category_{safe_filename(category_name)}.xml"
+    # Send request to OpenRouter
+    r = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "anthropic/claude-3-haiku",
+            "messages": [{"role": "user", "content": prompt}]
+        }
+    )
 
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(build_rss(items, feed_title=f"Cyber Threat Intel Feed - {category_name}"))
+    result = r.json()
 
-print("✅ RSS feeds generated successfully!")
+    # Safely parse the AI response as JSON
+    raw_content = result["choices"][0]["message"]["content"].strip()
+    try:
+        parsed = json.loads(raw_content)
+        category = parsed.get("category", "general")
+    except json.JSONDecodeError:
+        # fallback in case AI returned text instead of JSON
+        category = "general"
+
+    # Normalize the category to lowercase for safety
+    a["tag"] = category.lower()
+
+    tagged.append(a)
+
+    # Optional: small delay to prevent rate limits
+    time.sleep(1)
+
+# Write the tagged articles safely
+with open("tagged_articles.json", "w", encoding="utf-8") as f:
+    json.dump(tagged, f, ensure_ascii=False, indent=2)
+
+print("✅ Articles tagged successfully!")
