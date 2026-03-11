@@ -4,32 +4,36 @@ import os
 from xml.sax.saxutils import escape
 import re
 
-# Ensure output folder exists
+# Create output folder
 os.makedirs("generated_feeds", exist_ok=True)
 
-# Load tagged articles
+# Load articles
 with open("tagged_articles.json", "r", encoding="utf-8") as f:
     articles = json.load(f)
 
-# Dictionary to hold RSS items by category
+# Dictionary: key=category, value=list of RSS <item>s
 feeds = {}
 
-# Helper function to create safe filenames from category names
+# Safe filename helper
 def safe_filename(name):
     name = name.lower().replace(" ", "_")
     name = re.sub(r"[^a-z0-9_]", "", name)
     return name or "general"
 
-# Process each article
-for a in articles:
-    title = escape(a.get("title", "No Title"))
-    link = escape(a.get("link", ""))
-    summary = escape(a.get("summary", ""))
-    category = a.get("tag", "General")
-    
-    pub_date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+# Build RSS items
+for article in articles:
+    title = escape(article.get("title", "No Title"))
+    link = escape(article.get("link", ""))
+    summary = escape(article.get("summary", ""))
+    category = article.get("tag", "General")
+
+    # Prepend category in title for clarity
     title_with_tag = f"[{category}] {title}"
 
+    # Format pubDate
+    pub_date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    # Create RSS item
     item_xml = f"""
     <item>
         <title>{title_with_tag}</title>
@@ -38,13 +42,13 @@ for a in articles:
         <pubDate>{pub_date}</pubDate>
     </item>
     """
-    
+
     # Add to "all" feed
     feeds.setdefault("all", []).append(item_xml)
-    # Add to category feed
+    # Add to category-specific feed
     feeds.setdefault(category, []).append(item_xml)
 
-# Function to generate RSS XML
+# Function to build full RSS XML
 def build_rss(items, feed_title="Cyber Threat Intel Feed"):
     rss = f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -57,10 +61,10 @@ def build_rss(items, feed_title="Cyber Threat Intel Feed"):
     rss += "\n</channel></rss>"
     return rss
 
-# Write one file per category
-for cat, items in feeds.items():
-    filename = f"generated_feeds/{safe_filename(cat)}.xml"
+# Write one file per category only — filenames are safe
+for category_name, items in feeds.items():
+    filename = f"generated_feeds/{safe_filename(category_name)}.xml"
     with open(filename, "w", encoding="utf-8") as f:
-        f.write(build_rss(items, feed_title=f"Cyber Threat Intel Feed - {cat}"))
+        f.write(build_rss(items, feed_title=f"Cyber Threat Intel Feed - {category_name}"))
 
-print("RSS feeds generated successfully!")
+print("✅ RSS feeds generated successfully!")
