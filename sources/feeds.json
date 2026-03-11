@@ -1,1 +1,12 @@
-
+[
+ "https://www.bleepingcomputer.com/feed/",
+ "https://krebsonsecurity.com/feed/",
+ "https://thehackernews.com/feeds/posts/default",
+ "https://www.darkreading.com/rss.xml",
+ "https://www.cisa.gov/news.xml",
+ "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml",
+ "https://securityaffairs.com/feed",
+ "https://threatpost.com/feed/",
+ "https://www.helpnetsecurity.com/feed/",
+ "https://www.schneier.com/blog/atom.xml"
+]
